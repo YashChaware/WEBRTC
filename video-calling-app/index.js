@@ -1,6 +1,3 @@
-import process from "process";
-window.process = process;
-
 const http = require("http");
 const express = require("express");
 const { Server } = require('socket.io');

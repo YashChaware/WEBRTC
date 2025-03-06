@@ -155,33 +155,25 @@ function App() {
   };
 
   // Toggle Camera
-  const toggleVideo = async () => {
+  const toggleVideo = () => {
     if (!stream) return;
-
-    if (isVideoOn) {
-      // Turn off video: Stop all video tracks
-      stream.getVideoTracks().forEach(track => track.stop());
-      setIsVideoOn(false);
-    } else {
-      // Turn on video: Request access again
-      try {
-        const newStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: isAudioOn });
-        setStream(newStream);
-        if (myVideoRef.current) myVideoRef.current.srcObject = newStream;
-        setIsVideoOn(true);
-      } catch (error) {
-        console.error('Error accessing camera:', error);
-      }
+  
+    const videoTrack = stream.getVideoTracks()[0];
+    if (videoTrack) {
+      videoTrack.enabled = !isVideoOn;  // Enable/disable instead of stopping
+      setIsVideoOn(!isVideoOn);
     }
   };
+  
 
   // Toggle Mic
   const toggleAudio = () => {
     if (!stream) return;
-
+  
     stream.getAudioTracks().forEach(track => (track.enabled = !isAudioOn));
     setIsAudioOn(!isAudioOn);
   };
+  
 
   return (
     <div className="flex flex-col items-center">
