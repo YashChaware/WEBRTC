@@ -45,11 +45,23 @@ io.on("connection", (socket) => {
         io.to(data.to).emit("callEnded");
     });
 
+    // ✅ Handle screen share start
+    socket.on("startScreenShare", (data) => {
+        console.log(`📺 Screen sharing started by ${data.from}`);
+        io.to(data.to).emit("screenShareStarted", { from: data.from });
+    });
+
+    // ✅ Handle screen share stop
+    socket.on("stopScreenShare", (data) => {
+        console.log(`🛑 Screen sharing stopped by ${data.from}`);
+        io.to(data.to).emit("screenShareStopped");
+    });
+
     socket.on("disconnect", () => {
         console.log("User disconnected:", socket.id);
     });
 });
 
 server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`🚀 Server running on port ${PORT}`);
 });
