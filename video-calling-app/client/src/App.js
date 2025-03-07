@@ -156,15 +156,15 @@ function App() {
   };
 
   // Toggle Camera
-  const toggleVideo = () => {
+  const toggleVideo = useCallback(() => {
     if (!stream) return;
   
     const videoTrack = stream.getVideoTracks()[0];
     if (videoTrack) {
-      videoTrack.enabled = !isVideoOn;  // Enable/disable instead of stopping
+      videoTrack.enabled = !isVideoOn;
       setIsVideoOn(!isVideoOn);
     }
-  };
+  }, [stream, isVideoOn]);
   
 
   // Toggle Mic
@@ -175,7 +175,7 @@ function App() {
     setIsAudioOn(!isAudioOn);
   };
 
-  // ✅ Start Screen Sharing
+   // ✅ Start Screen Sharing
 const startScreenShare = async () => {
   try {
     const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
@@ -197,11 +197,36 @@ const startScreenShare = async () => {
   }
 };
 
-// ✅ Stop Screen Sharing
+// ✅ Stop Screen Sharing (Fixed)
 const stopScreenShare = () => {
   setIsScreenSharing(false);
-  toggleVideo(); // Switch back to webcam video
+
+  if (connectionRef.current) {
+    // Switch back to webcam video
+    const webcamTrack = stream.getVideoTracks()[0];
+    connectionRef.current.replaceTrack(
+      connectionRef.current.streams[0].getVideoTracks()[0],  // Remove screen share track
+      webcamTrack,
+      stream
+    );
+
+    // ✅ Notify the other user that screen sharing has stopped
+    socket.emit("stopScreenShare", { to: userToCall });
+  }
 };
+
+    // ✅ Listen for stopScreenShare event
+    useEffect(() => {
+      socket.on("stopScreenShare", () => {
+        setIsScreenSharing(false);
+        toggleVideo(); // Switch back to webcam video
+      });
+
+      return () => {
+        socket.off("stopScreenShare");
+      };
+    }, [toggleVideo]);
+
 
   
 
