@@ -17,6 +17,7 @@ function App() {
   const [userId, setUserId] = useState('');
   const [userToCall, setUserToCall] = useState('');
   const [isCallAccepted, setIsCallAccepted] = useState(false);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [incomingCallInfo, setIncomingCallInfo] = useState({});
 
   // Mic & Camera State
@@ -173,6 +174,35 @@ function App() {
     stream.getAudioTracks().forEach(track => (track.enabled = !isAudioOn));
     setIsAudioOn(!isAudioOn);
   };
+
+  // ✅ Start Screen Sharing
+const startScreenShare = async () => {
+  try {
+    const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+    const screenTrack = screenStream.getVideoTracks()[0];
+
+    screenTrack.onended = () => stopScreenShare(); // Stop when user ends sharing
+
+    if (connectionRef.current) {
+      connectionRef.current.replaceTrack(
+        stream.getVideoTracks()[0],  // Replace webcam video with screen share
+        screenTrack,
+        stream
+      );
+    }
+
+    setIsScreenSharing(true);
+  } catch (error) {
+    console.error("Error sharing screen:", error);
+  }
+};
+
+// ✅ Stop Screen Sharing
+const stopScreenShare = () => {
+  setIsScreenSharing(false);
+  toggleVideo(); // Switch back to webcam video
+};
+
   
 
   return (
@@ -215,6 +245,13 @@ function App() {
           {isAudioOn ? 'Mute Mic' : 'Unmute Mic'}
         </button>
       </div>
+
+      {isCallAccepted && (
+        <button className={`input ${isScreenSharing ? 'bg-red' : 'bg-green'}`} onClick={isScreenSharing ? stopScreenShare : startScreenShare}>
+          {isScreenSharing ? "Stop Screen Share" : "Start Screen Share"}
+        </button>
+)}
+
 
       {isCallAccepted ? (
         <button className='input bg-red mt-4' onClick={endCall}>End Call</button>
