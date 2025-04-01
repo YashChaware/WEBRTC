@@ -238,10 +238,28 @@ function App() {
   // Chat: Render chat UI only when call is active
   const renderChat = () => (
     <div className="chat-container">
+      <div 
+        className="drag-drop-area" 
+        onDragOver={handleDragOver} 
+        onDrop={handleDrop}
+        style={{ border: '2px dashed #ccc', padding: '10px', marginTop: '10px', textAlign: 'center' }}
+        >
       <h3>Chat</h3>
       <div className="chat-box">
         {messages.map((msg, index) => (
-          <p key={index}><strong>{msg.from}:</strong> {msg.text}</p>
+          <p key={index}>
+            <strong>{msg.from}:</strong>{' '}
+            {msg.text ? (
+              msg.text
+            ) : (
+              <>
+                sent a file: <a href={msg.data} download={msg.fileName}>{msg.fileName}</a>
+                {msg.fileType.startsWith('image/') && (
+                  <img src={msg.data} alt={msg.fileName} style={{ maxWidth: '200px' }} />
+                )}
+              </>
+            )}
+          </p>
         ))}
       </div>
       <div className="chat-input">
@@ -251,7 +269,28 @@ function App() {
           onChange={(e) => setNewMessage(e.target.value)}
           placeholder="Type a message..."
         />
+        
         <button onClick={sendMessage} className='input bg-green'>Send</button>
+  
+        {/* Hidden file input for click-to-select */}
+        <input 
+          type="file" 
+          id="fileInput" 
+          style={{ display: 'none' }} 
+          onChange={(e) => {
+            const file = e.target.files[0];
+            if (file) handleFileUpload(file);
+          }}
+        />
+  
+        {/* File icon button */}
+        <button 
+          onClick={() => document.getElementById('fileInput').click()}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', marginLeft: '8px' }}
+        >
+          <img src="/client/src/components/upload_icon.png" alt="Select File" style={{ width: '24px', height: '24px' }}/>
+        </button>
+      </div>
       </div>
     </div>
   );
@@ -286,6 +325,24 @@ function App() {
     };
     reader.readAsDataURL(file);
   };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Optionally, add a CSS class to highlight the drop area
+  };
+  
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Get the dropped file
+    const droppedFiles = e.dataTransfer.files;
+    if (droppedFiles && droppedFiles.length > 0) {
+      handleFileUpload(droppedFiles[0]); // For simplicity, handle the first file
+      e.dataTransfer.clearData();
+    }
+  };
+  
   
 
   return (
