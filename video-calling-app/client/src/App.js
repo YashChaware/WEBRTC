@@ -24,25 +24,28 @@ function App() {
   const [isVideoOn, setIsVideoOn] = useState(false);
   const [isAudioOn, setIsAudioOn] = useState(false);
 
+  // Chat State
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
+
   useEffect(() => {
     // Get user media (camera & mic)
     navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-  .then((mediaStream) => {
-    setStream(mediaStream);
+      .then((mediaStream) => {
+        setStream(mediaStream);
 
-    // Assign stream to video element
-    if (myVideoRef.current) myVideoRef.current.srcObject = mediaStream;
+        // Assign stream to video element
+        if (myVideoRef.current) myVideoRef.current.srcObject = mediaStream;
 
-    // Disable video and audio tracks initially
-    mediaStream.getVideoTracks().forEach(track => track.enabled = false);
-    mediaStream.getAudioTracks().forEach(track => track.enabled = false);
+        // Disable video and audio tracks initially
+        mediaStream.getVideoTracks().forEach(track => track.enabled = false);
+        mediaStream.getAudioTracks().forEach(track => track.enabled = false);
 
-    // Set initial state
-    setIsVideoOn(false);
-    setIsAudioOn(false);
-  })
-  .catch((error) => console.error('Error accessing media devices:', error));
-
+        // Set initial state
+        setIsVideoOn(false);
+        setIsAudioOn(false);
+      })
+      .catch((error) => console.error('Error accessing media devices:', error));
 
     // Listen for user ID from backend
     socket.on('yourID', (id) => {
@@ -50,8 +53,14 @@ function App() {
       setUserId(id);
     });
 
+    // Listen for chat messages
+    socket.on('message', (msg) => {
+      setMessages((prevMessages) => [...prevMessages, msg]);
+    });
+
     return () => {
       socket.off("yourID");
+      socket.off("message");
     };
   }, []);
 
@@ -82,10 +91,10 @@ function App() {
     setIncomingCallInfo({});
   }, []);
 
-  // Handle WebSocket Events
+  // Handle WebSocket Events for calls
   useEffect(() => {
     console.log("Socket connected:", socket.connected);
-    
+
     socket.on('incomingCall', handleIncomingCall);
     socket.on('callAccepted', handleCallAccepted);
     socket.on('callEnded', destroyConnection);
@@ -158,76 +167,125 @@ function App() {
   // Toggle Camera
   const toggleVideo = useCallback(() => {
     if (!stream) return;
-  
+
     const videoTrack = stream.getVideoTracks()[0];
     if (videoTrack) {
       videoTrack.enabled = !isVideoOn;
       setIsVideoOn(!isVideoOn);
     }
   }, [stream, isVideoOn]);
-  
 
   // Toggle Mic
   const toggleAudio = () => {
     if (!stream) return;
-  
+
     stream.getAudioTracks().forEach(track => (track.enabled = !isAudioOn));
     setIsAudioOn(!isAudioOn);
   };
 
-   // ✅ Start Screen Sharing
-const startScreenShare = async () => {
-  try {
-    const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-    const screenTrack = screenStream.getVideoTracks()[0];
+  // ✅ Start Screen Sharing
+  const startScreenShare = async () => {
+    try {
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      const screenTrack = screenStream.getVideoTracks()[0];
 
-    screenTrack.onended = () => stopScreenShare(); // Stop when user ends sharing
+      screenTrack.onended = () => stopScreenShare(); // Stop when user ends sharing
+
+      if (connectionRef.current) {
+        connectionRef.current.replaceTrack(
+          stream.getVideoTracks()[0],  // Replace webcam video with screen share
+          screenTrack,
+          stream
+        );
+      }
+
+      setIsScreenSharing(true);
+    } catch (error) {
+      console.error("Error sharing screen:", error);
+    }
+  };
+
+  // ✅ Stop Screen Sharing (Fixed)
+  const stopScreenShare = () => {
+    setIsScreenSharing(false);
 
     if (connectionRef.current) {
+      // Switch back to webcam video
+      const webcamTrack = stream.getVideoTracks()[0];
       connectionRef.current.replaceTrack(
-        stream.getVideoTracks()[0],  // Replace webcam video with screen share
-        screenTrack,
+        connectionRef.current.streams[0].getVideoTracks()[0],  // Remove screen share track
+        webcamTrack,
         stream
       );
+
+      // ✅ Notify the other user that screen sharing has stopped
+      socket.emit("stopScreenShare", { to: userToCall });
     }
+  };
 
-    setIsScreenSharing(true);
-  } catch (error) {
-    console.error("Error sharing screen:", error);
-  }
-};
+  // ✅ Listen for stopScreenShare event
+  useEffect(() => {
+    socket.on("stopScreenShare", () => {
+      setIsScreenSharing(false);
+      toggleVideo(); // Switch back to webcam video
+    });
 
-// ✅ Stop Screen Sharing (Fixed)
-const stopScreenShare = () => {
-  setIsScreenSharing(false);
+    return () => {
+      socket.off("stopScreenShare");
+    };
+  }, [toggleVideo]);
 
-  if (connectionRef.current) {
-    // Switch back to webcam video
-    const webcamTrack = stream.getVideoTracks()[0];
-    connectionRef.current.replaceTrack(
-      connectionRef.current.streams[0].getVideoTracks()[0],  // Remove screen share track
-      webcamTrack,
-      stream
-    );
+  // Chat: Render chat UI only when call is active
+  const renderChat = () => (
+    <div className="chat-container">
+      <h3>Chat</h3>
+      <div className="chat-box">
+        {messages.map((msg, index) => (
+          <p key={index}><strong>{msg.from}:</strong> {msg.text}</p>
+        ))}
+      </div>
+      <div className="chat-input">
+        <input
+          type="text"
+          value={newMessage}
+          onChange={(e) => setNewMessage(e.target.value)}
+          placeholder="Type a message..."
+        />
+        <button onClick={sendMessage} className='input bg-green'>Send</button>
+      </div>
+    </div>
+  );
 
-    // ✅ Notify the other user that screen sharing has stopped
-    socket.emit("stopScreenShare", { to: userToCall });
-  }
-};
+  // Chat: Send message handler
+  const sendMessage = () => {
+    if (newMessage.trim() === '') return;
+    // Use userToCall if available; otherwise, fall back to the remote caller's ID
+    const recipientId = userToCall || incomingCallInfo.from;
+    const messageData = { from: userId, to: recipientId, text: newMessage };
+    socket.emit('sendMessage', messageData);
+    setMessages((prevMessages) => [...prevMessages, messageData]);
+    setNewMessage('');
+  };
 
-    // ✅ Listen for stopScreenShare event
-    useEffect(() => {
-      socket.on("stopScreenShare", () => {
-        setIsScreenSharing(false);
-        toggleVideo(); // Switch back to webcam video
-      });
-
-      return () => {
-        socket.off("stopScreenShare");
+  const handleFileUpload = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      // Determine the recipient's ID; you may use userToCall if available, or incomingCallInfo.from
+      const recipientId = userToCall || incomingCallInfo.from;
+      const fileData = {
+        from: userId,
+        to: recipientId,
+        fileName: file.name,
+        fileType: file.type,
+        data: reader.result, // Base64 encoded file data
       };
-    }, [toggleVideo]);
-
-
+      socket.emit('sendFile', fileData);
+      // Optionally, update your messages state so the file appears in your chat UI
+      setMessages((prev) => [...prev, fileData]);
+    };
+    reader.readAsDataURL(file);
+  };
   
 
   return (
@@ -275,8 +333,7 @@ const stopScreenShare = () => {
         <button className={`input ${isScreenSharing ? 'bg-red' : 'bg-green'}`} onClick={isScreenSharing ? stopScreenShare : startScreenShare}>
           {isScreenSharing ? "Stop Screen Share" : "Start Screen Share"}
         </button>
-)}
-
+      )}
 
       {isCallAccepted ? (
         <button className='input bg-red mt-4' onClick={endCall}>End Call</button>
@@ -288,6 +345,9 @@ const stopScreenShare = () => {
           </div>
         )
       )}
+
+      {/* Render Chat only when call is active */}
+      {isCallAccepted && renderChat()}
     </div>
   );
 }

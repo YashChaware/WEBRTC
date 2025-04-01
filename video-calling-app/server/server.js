@@ -45,16 +45,28 @@ io.on("connection", (socket) => {
         io.to(data.to).emit("callEnded");
     });
 
-    // ✅ Handle screen share start
+    // Handle screen share start
     socket.on("startScreenShare", (data) => {
         console.log(`📺 Screen sharing started by ${data.from}`);
         io.to(data.to).emit("screenShareStarted", { from: data.from });
     });
 
-    // ✅ Handle screen share stop
+    // Handle screen share stop
     socket.on("stopScreenShare", (data) => {
         console.log(`🛑 Screen sharing stopped by ${data.from}`);
         io.to(data.to).emit("screenShareStopped");
+    });
+
+    // Chat message handler for text messages
+    socket.on("sendMessage", (data) => {
+        console.log(`Forwarding message from ${data.from} to ${data.to}: ${data.text}`);
+        io.to(data.to).emit("message", data);
+    });
+    
+    // File share handler
+    socket.on("sendFile", (data) => {
+        console.log(`Forwarding file from ${data.from} to ${data.to}: ${data.fileName}`);
+        io.to(data.to).emit("message", data);
     });
 
     socket.on("disconnect", () => {
