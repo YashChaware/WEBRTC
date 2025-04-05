@@ -1,17 +1,54 @@
+// App.js
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { useBreakpointValue } from '@chakra-ui/react';
 import { io } from 'socket.io-client';
 import SimplePeer from 'simple-peer';
-import './App.css';
-import process from "process";
-window.process = process;
+import process from 'process';
+import {
+  ChakraProvider,
+  Flex,
+  Box,
+  Text,
 
-// Ensure correct WebSocket connection
-const socket = io('ws://localhost:4000', { transports: ["websocket"] });
+  HStack,
+  Button,
+  IconButton,
+  Input,
+  Divider,
+  useToast,
+  extendTheme
+} from '@chakra-ui/react';
+import {
+  FaVideo,
+  FaMicrophone,
+  FaPhoneSlash,
+  FaPhone,
+  FaDesktop,
+  FaUpload,
+} from 'react-icons/fa';
+import { FiSend } from 'react-icons/fi';
+import './App.css'; // Optional styling
+
+window.process = process;
+const socket = io('ws://localhost:4000', { transports: ['websocket'] });
+
+// Optional custom Chakra UI theme (dark mode)
+const customTheme = extendTheme({
+  config: {
+    initialColorMode: 'dark',
+    useSystemColorMode: false,
+  },
+});
 
 function App() {
   const myVideoRef = useRef();
   const peerVideoRef = useRef();
   const connectionRef = useRef(null);
+  const toast = useToast();
+  const floatingVideoProps = useBreakpointValue({
+    base: { position: 'static' }, // not absolutely positioned on small screens
+    md: { position: 'absolute', bottom: '20px', right: '20px' },
+  });
 
   const [stream, setStream] = useState(null);
   const [userId, setUserId] = useState('');
@@ -28,52 +65,49 @@ function App() {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
 
+  // 1) Initialize Media & Sockets
   useEffect(() => {
-    // Get user media (camera & mic)
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+    navigator.mediaDevices
+      .getUserMedia({ video: true, audio: true })
       .then((mediaStream) => {
         setStream(mediaStream);
-
-        // Assign stream to video element
         if (myVideoRef.current) myVideoRef.current.srcObject = mediaStream;
 
-        // Disable video and audio tracks initially
-        mediaStream.getVideoTracks().forEach(track => track.enabled = false);
-        mediaStream.getAudioTracks().forEach(track => track.enabled = false);
-
-        // Set initial state
+        // Disable video/audio initially
+        mediaStream.getVideoTracks().forEach((track) => (track.enabled = false));
+        mediaStream.getAudioTracks().forEach((track) => (track.enabled = false));
         setIsVideoOn(false);
         setIsAudioOn(false);
       })
-      .catch((error) => console.error('Error accessing media devices:', error));
+      .catch((error) => console.error('Error accessing media:', error));
 
-    // Listen for user ID from backend
     socket.on('yourID', (id) => {
-      console.log("User ID received:", id);
+      console.log('User ID received:', id);
       setUserId(id);
     });
 
-    // Listen for chat messages
     socket.on('message', (msg) => {
-      setMessages((prevMessages) => [...prevMessages, msg]);
+      setMessages((prev) => [...prev, msg]);
     });
 
     return () => {
-      socket.off("yourID");
-      socket.off("message");
+      socket.off('yourID');
+      socket.off('message');
     };
   }, []);
 
-  // Handle Incoming Call
-  const handleIncomingCall = useCallback(({ from, signal }) => {
-    if (isCallAccepted) {
-      socket.emit('rejectCall', { to: from });
-      return;
-    }
-    setIncomingCallInfo({ isSomeoneCalling: true, from, signal });
-  }, [isCallAccepted]);
+  // 2) Handle Incoming Calls
+  const handleIncomingCall = useCallback(
+    ({ from, signal }) => {
+      if (isCallAccepted) {
+        socket.emit('rejectCall', { to: from });
+        return;
+      }
+      setIncomingCallInfo({ isSomeoneCalling: true, from, signal });
+    },
+    [isCallAccepted]
+  );
 
-  // Handle Call Acceptance
   const handleCallAccepted = useCallback((signal) => {
     setIsCallAccepted(true);
     if (connectionRef.current) {
@@ -81,7 +115,6 @@ function App() {
     }
   }, []);
 
-  // Destroy Connection
   const destroyConnection = useCallback(() => {
     if (connectionRef.current) {
       connectionRef.current.destroy();
@@ -91,83 +124,66 @@ function App() {
     setIncomingCallInfo({});
   }, []);
 
-  // Handle WebSocket Events for calls
+  // 3) Register Socket Listeners
   useEffect(() => {
-    console.log("Socket connected:", socket.connected);
-
     socket.on('incomingCall', handleIncomingCall);
     socket.on('callAccepted', handleCallAccepted);
     socket.on('callEnded', destroyConnection);
 
-    return () => {
-      socket.off("incomingCall", handleIncomingCall);
-      socket.off("callAccepted", handleCallAccepted);
-      socket.off("callEnded", destroyConnection);
-    };
-  }, [handleIncomingCall, handleCallAccepted, destroyConnection]);
-
-  // Initiate Call
-  const initiateCall = () => {
-    if (!userToCall.trim()) {
-      alert('Enter User ID to initiate a call');
-      return;
-    }
-
-    console.log("Initiating call to:", userToCall);
-    const peer = new SimplePeer({ initiator: true, trickle: false, stream });
-
-    peer.on('signal', (signal) => {
-      console.log("Sending call signal:", { userToCall, from: userId });
-      socket.emit('callUser', { userToCall, from: userId, signal });
+    // Stop Screen Share event
+    socket.on('stopScreenShare', () => {
+      setIsScreenSharing(false);
+      toggleVideo();
     });
 
+    return () => {
+      socket.off('incomingCall', handleIncomingCall);
+      socket.off('callAccepted', handleCallAccepted);
+      socket.off('callEnded', destroyConnection);
+      socket.off('stopScreenShare');
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handleIncomingCall, handleCallAccepted, destroyConnection]);
+
+  // 4) Call & Answer & End
+  const initiateCall = () => {
+    if (!userToCall.trim()) {
+      toast({ title: 'Enter User ID to initiate a call', status: 'warning' });
+      return;
+    }
+    const peer = new SimplePeer({ initiator: true, trickle: false, stream });
+    peer.on('signal', (signal) => {
+      socket.emit('callUser', { userToCall, from: userId, signal });
+    });
     peer.on('stream', (remoteStream) => {
       if (peerVideoRef.current) peerVideoRef.current.srcObject = remoteStream;
     });
-
-    peer.on('close', () => {
-      console.log("Peer connection closed.");
-      destroyConnection();
-    });
-
+    peer.on('close', destroyConnection);
     connectionRef.current = peer;
   };
 
-  // Answer Call
   const answerCall = () => {
     setIsCallAccepted(true);
     const peer = new SimplePeer({ initiator: false, trickle: false, stream });
-
     peer.on('signal', (signal) => {
-      console.log("Answering call with signal:", signal);
       socket.emit('answerCall', { signal, to: incomingCallInfo.from });
     });
-
     peer.on('stream', (remoteStream) => {
       if (peerVideoRef.current) peerVideoRef.current.srcObject = remoteStream;
     });
-
     peer.signal(incomingCallInfo.signal);
-
-    peer.on('close', () => {
-      console.log("Peer connection closed.");
-      destroyConnection();
-    });
-
+    peer.on('close', destroyConnection);
     connectionRef.current = peer;
   };
 
-  // End Call
   const endCall = () => {
-    console.log("Ending call...");
     socket.emit('endCall', { to: incomingCallInfo.from });
     destroyConnection();
   };
 
-  // Toggle Camera
+  // 5) Camera & Mic Toggle
   const toggleVideo = useCallback(() => {
     if (!stream) return;
-
     const videoTrack = stream.getVideoTracks()[0];
     if (videoTrack) {
       videoTrack.enabled = !isVideoOn;
@@ -175,134 +191,51 @@ function App() {
     }
   }, [stream, isVideoOn]);
 
-  // Toggle Mic
   const toggleAudio = () => {
     if (!stream) return;
-
-    stream.getAudioTracks().forEach(track => (track.enabled = !isAudioOn));
+    stream.getAudioTracks().forEach((track) => (track.enabled = !isAudioOn));
     setIsAudioOn(!isAudioOn);
   };
 
-  // ✅ Start Screen Sharing
+  // 6) Screen Share Start/Stop
   const startScreenShare = async () => {
     try {
       const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
       const screenTrack = screenStream.getVideoTracks()[0];
-
-      screenTrack.onended = () => stopScreenShare(); // Stop when user ends sharing
-
+      screenTrack.onended = () => stopScreenShare();
       if (connectionRef.current) {
         connectionRef.current.replaceTrack(
-          stream.getVideoTracks()[0],  // Replace webcam video with screen share
+          stream.getVideoTracks()[0],
           screenTrack,
           stream
         );
       }
-
       setIsScreenSharing(true);
     } catch (error) {
-      console.error("Error sharing screen:", error);
+      console.error('Error sharing screen:', error);
     }
   };
 
-  // ✅ Stop Screen Sharing (Fixed)
   const stopScreenShare = () => {
     setIsScreenSharing(false);
-
     if (connectionRef.current) {
-      // Switch back to webcam video
       const webcamTrack = stream.getVideoTracks()[0];
       connectionRef.current.replaceTrack(
-        connectionRef.current.streams[0].getVideoTracks()[0],  // Remove screen share track
+        connectionRef.current.streams[0].getVideoTracks()[0],
         webcamTrack,
         stream
       );
-
-      // ✅ Notify the other user that screen sharing has stopped
-      socket.emit("stopScreenShare", { to: userToCall });
+      socket.emit('stopScreenShare', { to: userToCall });
     }
   };
 
-  // ✅ Listen for stopScreenShare event
-  useEffect(() => {
-    socket.on("stopScreenShare", () => {
-      setIsScreenSharing(false);
-      toggleVideo(); // Switch back to webcam video
-    });
-
-    return () => {
-      socket.off("stopScreenShare");
-    };
-  }, [toggleVideo]);
-
-  // Chat: Render chat UI only when call is active
-  const renderChat = () => (
-    <div className="chat-container">
-      <div 
-        className="drag-drop-area" 
-        onDragOver={handleDragOver} 
-        onDrop={handleDrop}
-        style={{ border: '2px dashed #ccc', padding: '10px', marginTop: '10px', textAlign: 'center' }}
-        >
-      <h3>Chat</h3>
-      <div className="chat-box">
-        {messages.map((msg, index) => (
-          <p key={index}>
-            <strong>{msg.from}:</strong>{' '}
-            {msg.text ? (
-              msg.text
-            ) : (
-              <>
-                sent a file: <a href={msg.data} download={msg.fileName}>{msg.fileName}</a>
-                {msg.fileType.startsWith('image/') && (
-                  <img src={msg.data} alt={msg.fileName} style={{ maxWidth: '200px' }} />
-                )}
-              </>
-            )}
-          </p>
-        ))}
-      </div>
-      <div className="chat-input">
-        <input
-          type="text"
-          value={newMessage}
-          onChange={(e) => setNewMessage(e.target.value)}
-          placeholder="Type a message..."
-        />
-        
-        <button onClick={sendMessage} className='input bg-green'>Send</button>
-  
-        {/* Hidden file input for click-to-select */}
-        <input 
-          type="file" 
-          id="fileInput" 
-          style={{ display: 'none' }} 
-          onChange={(e) => {
-            const file = e.target.files[0];
-            if (file) handleFileUpload(file);
-          }}
-        />
-  
-        {/* File icon button */}
-        <button 
-          onClick={() => document.getElementById('fileInput').click()}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', marginLeft: '8px' }}
-        >
-          <img src="/client/src/components/upload_icon.png" alt="Select File" style={{ width: '24px', height: '24px' }}/>
-        </button>
-      </div>
-      </div>
-    </div>
-  );
-
-  // Chat: Send message handler
+  // 7) Chat & File Sharing
   const sendMessage = () => {
-    if (newMessage.trim() === '') return;
-    // Use userToCall if available; otherwise, fall back to the remote caller's ID
+    if (!newMessage.trim()) return;
     const recipientId = userToCall || incomingCallInfo.from;
     const messageData = { from: userId, to: recipientId, text: newMessage };
     socket.emit('sendMessage', messageData);
-    setMessages((prevMessages) => [...prevMessages, messageData]);
+    setMessages((prev) => [...prev, messageData]);
     setNewMessage('');
   };
 
@@ -310,102 +243,437 @@ function App() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      // Determine the recipient's ID; you may use userToCall if available, or incomingCallInfo.from
       const recipientId = userToCall || incomingCallInfo.from;
       const fileData = {
         from: userId,
         to: recipientId,
         fileName: file.name,
         fileType: file.type,
-        data: reader.result, // Base64 encoded file data
+        data: reader.result,
       };
       socket.emit('sendFile', fileData);
-      // Optionally, update your messages state so the file appears in your chat UI
       setMessages((prev) => [...prev, fileData]);
     };
     reader.readAsDataURL(file);
   };
 
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    // Optionally, add a CSS class to highlight the drop area
-  };
-  
   const handleDrop = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    // Get the dropped file
     const droppedFiles = e.dataTransfer.files;
     if (droppedFiles && droppedFiles.length > 0) {
-      handleFileUpload(droppedFiles[0]); // For simplicity, handle the first file
+      handleFileUpload(droppedFiles[0]);
       e.dataTransfer.clearData();
     }
   };
-  
-  
 
-  return (
-    <div className="flex flex-col items-center">
-      <h2 className='text-center'>Video Calling MERN App</h2>
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
 
-      <div className='flex flex-col w-300 gap-4'>
+  // -------------------
+  // Render Sections
+  // -------------------
+
+  // Right Column: Chat
+  const renderChatSection = () => (
+    <Flex
+      direction="column"
+      flex={1}
+      bg="gray.800"
+      borderRadius="md"
+      p={4}
+      minH="400px"
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+      width={['100%', '20%']}
+      maxWidth={['100%', '400px']}
+    >
+      <Text fontWeight="bold" mb={2}>Chat</Text>
+      <Flex
+        direction="column"
+        flex="1"
+        overflowY="auto"
+        mb={2}
+        p={2}
+        borderWidth="1px"
+        borderColor="gray.700"
+        borderRadius="md"
+      >
+        {messages.map((msg, index) => (
+          <Flex key={index} mb={2} direction="column" fontSize="sm">
+            <Text fontWeight="bold">{msg.from}:</Text>
+            {msg.text ? (
+              <Text ml={4}>{msg.text}</Text>
+            ) : (
+              <Box ml={4}>
+                sent a file: <a href={msg.data} download={msg.fileName}>{msg.fileName}</a>
+                {msg.fileType?.startsWith('image/') && (
+                  <Box mt={1}>
+                    <img src={msg.data} alt={msg.fileName} style={{ maxWidth: '100px' }} />
+                  </Box>
+                )}
+              </Box>
+            )}
+          </Flex>
+        ))}
+      </Flex>
+
+      {/* Chat Input */}
+      <HStack mt={2}>
+        <Input
+          placeholder="Type a message..."
+          value={newMessage}
+          onChange={(e) => setNewMessage(e.target.value)}
+          bg="gray.700"
+          color="white"
+        />
+        <IconButton
+          icon={<FiSend />}
+          colorScheme="blue"
+          onClick={sendMessage}
+          aria-label="Send"
+        />
+        {/* Hidden file input */}
         <input
-          type="text"
+          type="file"
+          id="fileInput"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const file = e.target.files[0];
+            if (file) handleFileUpload(file);
+          }}
+        />
+        <IconButton
+          icon={<FaUpload />}
+          colorScheme="gray"
+          onClick={() => document.getElementById('fileInput').click()}
+          aria-label="Upload"
+        />
+      </HStack>
+    </Flex>
+  );
+
+  // // Middle Column: Call
+  // const renderCallSection = () => (
+  //   <Flex
+  //     direction="column"
+  //     flex={1}
+  //     bg="gray.800"
+  //     borderRadius="md"
+  //     p={4}
+  //     align="center"
+  //     minH="400px"
+  //   >
+  //     <Text fontWeight="bold" mb={2}>Your Video</Text>
+  //     <Divider mb={4} />
+  //     <Box
+  //       bg="black"
+  //       borderRadius="md"
+  //       w="full"
+  //       flex="1"
+  //       display="flex"
+  //       alignItems="center"
+  //       justifyContent="center"
+  //     >
+  //       {/* My Video */}
+  //       <video
+  //         ref={myVideoRef}
+  //         autoPlay
+  //         playsInline
+  //         muted
+  //         style={{ width: '250px', borderRadius: '8px' }}
+  //       />
+  //     </Box>
+  //     <Divider my={4} />
+  //     {isCallAccepted ? (
+  //       <Box
+  //         bg="black"
+  //         borderRadius="md"
+  //         w="full"
+  //         flex="1"
+  //         display="flex"
+  //         alignItems="center"
+  //         justifyContent="center"
+  //       >
+  //         {/* Peer Video */}
+  //         <video
+  //           ref={peerVideoRef}
+  //           autoPlay
+  //           playsInline
+  //           style={{ width: '250px', borderRadius: '8px' }}
+  //         />
+  //       </Box>
+  //     ) : (
+  //       <Flex
+  //         direction="column"
+  //         align="center"
+  //         justify="center"
+  //         w="full"
+  //         h="150px"
+  //         bg="gray.700"
+  //         borderRadius="md"
+  //       >
+  //         <Text color="gray.400">Waiting for a call...</Text>
+  //         {/* Optionally show call controls here */}
+  //         {incomingCallInfo?.isSomeoneCalling && (
+  //           <HStack mt={2}>
+  //             <Button
+  //               colorScheme="green"
+  //               leftIcon={<FaPhone />}
+  //               onClick={answerCall}
+  //             >
+  //               Accept
+  //             </Button>
+  //             <Button
+  //               colorScheme="red"
+  //               leftIcon={<FaPhoneSlash />}
+  //               onClick={destroyConnection}
+  //             >
+  //               Reject
+  //             </Button>
+  //           </HStack>
+  //         )}
+  //       </Flex>
+  //     )}
+  //   </Flex>
+  // );
+
+  // Modify the renderCallSection function as shown below:
+  // Middle Column: Call
+// Inside your App component, update the renderCallSection function:
+const renderCallSection = () => {
+  // Determine responsive overlay positioning;
+
+  if (isCallAccepted) {
+    return (
+      <Flex
+        direction="column"
+        flex={1}
+        bg="gray.800"
+        borderRadius="md"
+        p={4}
+        align="center"
+        justify="center"
+        minH="400px"
+        position="relative"
+      >
+        {/* Peer Video as Full Background */}
+        <video
+          ref={peerVideoRef}
+          autoPlay
+          playsInline
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            borderRadius: '8px',
+          }}
+        />
+        {/* Floating My Video Overlay */}
+        <Box
+          position="absolute"
+          {...floatingVideoProps}
+          width="300px"
+          height="auto"
+          boxShadow="lg"
+          borderRadius="md"
+          overflow="hidden"
+          bg="black"
+        >
+          <video
+            ref={myVideoRef}
+            autoPlay
+            playsInline
+            muted
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+            }}
+          />
+        </Box>
+      </Flex>
+    );
+  }
+  return (
+    <Flex
+      direction="column"
+      flex={1}
+      bg="gray.800"
+      borderRadius="md"
+      p={4}
+      align="center"
+      minH="400px"
+    >
+      <Text fontWeight="bold" mb={2}>Your Video</Text>
+      <Divider mb={4} />
+      <Box
+        bg="black"
+        borderRadius="md"
+        w="full"
+        flex="1"
+        display="flex"
+        alignItems="center"
+        justifyContent="center"
+      >
+        {/* My Video */}
+        <video
+          ref={myVideoRef}
+          autoPlay
+          playsInline
+          muted
+          style={{ width: '250px', borderRadius: '8px' }}
+        />
+      </Box>
+      <Divider my={4} />
+      <Flex
+        direction="column"
+        align="center"
+        justify="center"
+        w="full"
+        h="150px"
+        bg="gray.700"
+        borderRadius="md"
+      >
+        <Text color="gray.400">Waiting for a call...</Text>
+        {incomingCallInfo?.isSomeoneCalling && (
+          <HStack mt={2}>
+            <Button
+              colorScheme="green"
+              leftIcon={<FaPhone />}
+              onClick={answerCall}
+            >
+              Accept
+            </Button>
+            <Button
+              colorScheme="red"
+              leftIcon={<FaPhoneSlash />}
+              onClick={destroyConnection}
+            >
+              Reject
+            </Button>
+          </HStack>
+        )}
+      </Flex>
+    </Flex>
+  );
+};
+
+  // Right Column: Media Display
+  // const renderMediaSection = () => (
+  //   <Flex
+  //     direction="column"
+  //     flex={1}
+  //     bg="gray.800"
+  //     borderRadius="md"
+  //     p={4}
+  //     align="center"
+  //     minH="400px"
+  //   >
+  //     <Text fontWeight="bold" mb={2}>Media Display</Text>
+  //     <Divider mb={4} />
+  //     {isScreenSharing ? (
+  //       <Text color="green.400" fontWeight="bold">Screen Sharing Active</Text>
+  //     ) : (
+  //       <Text color="gray.400">No screen shared</Text>
+  //     )}
+  //   </Flex>
+  // );
+
+  // Bottom Action Buttons
+  const renderActionButtons = () => (
+    <HStack spacing={4} mt={4} wrap="wrap" justify="center">
+      <Button
+        colorScheme={isVideoOn ? 'green' : 'red'}
+        leftIcon={<FaVideo />}
+        onClick={toggleVideo}
+      >
+        {isVideoOn ? 'Camera On' : 'Camera Off'}
+      </Button>
+      <Button
+        colorScheme={isAudioOn ? 'green' : 'red'}
+        leftIcon={<FaMicrophone />}
+        onClick={toggleAudio}
+      >
+        {isAudioOn ? 'Mic on' : 'Mic '}
+      </Button>
+      {isCallAccepted && (
+        <Button
+          colorScheme={isScreenSharing ? 'red' : 'blue'}
+          leftIcon={<FaDesktop />}
+          onClick={isScreenSharing ? stopScreenShare : startScreenShare}
+        >
+          {isScreenSharing ? 'Stop Share' : 'Share Screen'}
+        </Button>
+      )}
+      {isCallAccepted && (
+        <Button colorScheme="red" leftIcon={<FaPhoneSlash />} onClick={endCall}>
+          End Call
+        </Button>
+      )}
+    </HStack>
+  );
+
+  // Top Header
+  const renderHeader = () => (
+    <Flex
+      align="center"
+      justify="space-between"
+      mb={4}
+      wrap="wrap"
+      gap={4}
+    >
+      <Text fontSize="lg" fontWeight="bold">
+        Video Chat & File Sharing App
+      </Text>
+
+      <HStack>
+        <Text fontSize="sm" color="gray.300">
+          Your User ID:
+        </Text>
+        <Text fontSize="sm" fontWeight="bold" color="blue.300">
+          {userId || 'Fetching...'}
+        </Text>
+      </HStack>
+
+      <HStack>
+        <Input
+          placeholder="Enter User ID to Call"
           value={userToCall}
           onChange={(e) => setUserToCall(e.target.value)}
-          placeholder="Enter User ID"
-          className='input'
+          bg="gray.700"
+          w="200px"
         />
-        <button onClick={initiateCall} className='input bg-blue'>Call User</button>
-      </div>
+        <Button
+          colorScheme="blue"
+          onClick={initiateCall}
+          leftIcon={<FaPhone />}
+        >
+          Call
+        </Button>
+      </HStack>
+    </Flex>
+  );
 
-      <section className='m-4'>My ID: <u><i>{userId}</i></u></section>
+  return (
+    <ChakraProvider theme={customTheme}>
+      <Flex direction="column" minH="100vh" p={4} bg="gray.900" color="white">
+        {/* Header */}
+        {renderHeader()}
 
-      <div className='flex flex-row gap-4 m-4 mb-8'>
-        <div>
-          <h3 className='text-center'>My Video</h3>
-          <video ref={myVideoRef} autoPlay playsInline muted className='video_player' />
-        </div>
+        {/* 3 Columns: Chat | Call | Media */}
+        <Flex flex="1" gap={4} direction={['column', 'row']} mb={4}>
+          {renderCallSection()}
+          {renderChatSection()}
+          {/* {renderMediaSection()} */}
+        </Flex>
 
-        {isCallAccepted &&
-          <div>
-            <h3 className='text-center'>Peer Video</h3>
-            <video ref={peerVideoRef} autoPlay playsInline className='video_player' />
-          </div>
-        }
-      </div>
-
-      <div className="flex gap-4">
-        <button className={`input ${isVideoOn ? 'bg-red' : 'bg-green'}`} onClick={toggleVideo}>
-          {isVideoOn ? 'Turn Off Camera' : 'Turn On Camera'}
-        </button>
-
-        <button className={`input ${isAudioOn ? 'bg-red' : 'bg-green'}`} onClick={toggleAudio}>
-          {isAudioOn ? 'Mute Mic' : 'Unmute Mic'}
-        </button>
-      </div>
-
-      {isCallAccepted && (
-        <button className={`input ${isScreenSharing ? 'bg-red' : 'bg-green'}`} onClick={isScreenSharing ? stopScreenShare : startScreenShare}>
-          {isScreenSharing ? "Stop Screen Share" : "Start Screen Share"}
-        </button>
-      )}
-
-      {isCallAccepted ? (
-        <button className='input bg-red mt-4' onClick={endCall}>End Call</button>
-      ) : (
-        incomingCallInfo?.isSomeoneCalling && (
-          <div className='flex flex-col mb-8'>
-            <section className='m-4'><u>{incomingCallInfo?.from}</u> is calling</section>
-            <button onClick={answerCall} className='input bg-green'>Answer Call</button>
-          </div>
-        )
-      )}
-
-      {/* Render Chat only when call is active */}
-      {isCallAccepted && renderChat()}
-    </div>
+        {/* Bottom Buttons */}
+        <Flex justify="center">{renderActionButtons()}</Flex>
+      </Flex>
+    </ChakraProvider>
   );
 }
 
