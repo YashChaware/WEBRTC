@@ -9,8 +9,8 @@ import {
   Flex,
   Box,
   Text,
-
-  HStack,
+  Textarea,
+  HStack,  InputGroup, InputRightElement,
   Button,
   IconButton,
   Input,
@@ -305,7 +305,7 @@ function App() {
           <Flex key={index} mb={2} direction="column" fontSize="sm">
             <Text fontWeight="bold">{msg.from}:</Text>
             {msg.text ? (
-              <Text ml={4}>{msg.text}</Text>
+              <Text ml={4} whiteSpace="pre-line">{msg.text}</Text>
             ) : (
               <Box ml={4}>
                 sent a file: <a href={msg.data} download={msg.fileName}>{msg.fileName}</a>
@@ -322,132 +322,51 @@ function App() {
 
       {/* Chat Input */}
       <HStack mt={2}>
-        <Input
-          placeholder="Type a message..."
-          value={newMessage}
-          onChange={(e) => setNewMessage(e.target.value)}
-          bg="gray.700"
-          color="white"
-        />
-        <IconButton
+        <InputGroup position="relative">
+  <Textarea
+    placeholder="Type a message..."
+    value={newMessage}
+    onChange={(e) => setNewMessage(e.target.value)}
+    onKeyDown={(e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    }}
+    bg="gray.700"
+    color="white"
+    resize="none"
+    rows={2}
+    pr="3rem" // leave space for the icon
+  />
+
+  <InputRightElement width="3rem">
+    <label htmlFor="fileInput" style={{ cursor: 'pointer' }}>
+      <FaUpload />
+    </label>
+    <input
+      type="file"
+      id="fileInput"
+      style={{ display: 'none' }}
+      onChange={(e) => {
+        const file = e.target.files[0];
+        if (file) handleFileUpload(file);
+      }}
+    />
+  </InputRightElement>
+</InputGroup>
+<IconButton
           icon={<FiSend />}
           colorScheme="blue"
           onClick={sendMessage}
           aria-label="Send"
         />
-        {/* Hidden file input */}
-        <input
-          type="file"
-          id="fileInput"
-          style={{ display: 'none' }}
-          onChange={(e) => {
-            const file = e.target.files[0];
-            if (file) handleFileUpload(file);
-          }}
-        />
-        <IconButton
-          icon={<FaUpload />}
-          colorScheme="gray"
-          onClick={() => document.getElementById('fileInput').click()}
-          aria-label="Upload"
-        />
       </HStack>
     </Flex>
   );
 
-  // // Middle Column: Call
-  // const renderCallSection = () => (
-  //   <Flex
-  //     direction="column"
-  //     flex={1}
-  //     bg="gray.800"
-  //     borderRadius="md"
-  //     p={4}
-  //     align="center"
-  //     minH="400px"
-  //   >
-  //     <Text fontWeight="bold" mb={2}>Your Video</Text>
-  //     <Divider mb={4} />
-  //     <Box
-  //       bg="black"
-  //       borderRadius="md"
-  //       w="full"
-  //       flex="1"
-  //       display="flex"
-  //       alignItems="center"
-  //       justifyContent="center"
-  //     >
-  //       {/* My Video */}
-  //       <video
-  //         ref={myVideoRef}
-  //         autoPlay
-  //         playsInline
-  //         muted
-  //         style={{ width: '250px', borderRadius: '8px' }}
-  //       />
-  //     </Box>
-  //     <Divider my={4} />
-  //     {isCallAccepted ? (
-  //       <Box
-  //         bg="black"
-  //         borderRadius="md"
-  //         w="full"
-  //         flex="1"
-  //         display="flex"
-  //         alignItems="center"
-  //         justifyContent="center"
-  //       >
-  //         {/* Peer Video */}
-  //         <video
-  //           ref={peerVideoRef}
-  //           autoPlay
-  //           playsInline
-  //           style={{ width: '250px', borderRadius: '8px' }}
-  //         />
-  //       </Box>
-  //     ) : (
-  //       <Flex
-  //         direction="column"
-  //         align="center"
-  //         justify="center"
-  //         w="full"
-  //         h="150px"
-  //         bg="gray.700"
-  //         borderRadius="md"
-  //       >
-  //         <Text color="gray.400">Waiting for a call...</Text>
-  //         {/* Optionally show call controls here */}
-  //         {incomingCallInfo?.isSomeoneCalling && (
-  //           <HStack mt={2}>
-  //             <Button
-  //               colorScheme="green"
-  //               leftIcon={<FaPhone />}
-  //               onClick={answerCall}
-  //             >
-  //               Accept
-  //             </Button>
-  //             <Button
-  //               colorScheme="red"
-  //               leftIcon={<FaPhoneSlash />}
-  //               onClick={destroyConnection}
-  //             >
-  //               Reject
-  //             </Button>
-  //           </HStack>
-  //         )}
-  //       </Flex>
-  //     )}
-  //   </Flex>
-  // );
-
-  // Modify the renderCallSection function as shown below:
-  // Middle Column: Call
-// Inside your App component, update the renderCallSection function:
-const renderCallSection = () => {
-  // Determine responsive overlay positioning;
-
-  if (isCallAccepted) {
-    return (
+  const renderCallSection = () => {
+    return isCallAccepted ? (
       <Flex
         direction="column"
         flex={1}
@@ -455,32 +374,79 @@ const renderCallSection = () => {
         borderRadius="md"
         p={4}
         align="center"
-        justify="center"
         minH="400px"
-        position="relative"
+        position='relative'
       >
-        {/* Peer Video as Full Background */}
-        <video
-          ref={peerVideoRef}
-          autoPlay
-          playsInline
-          style={{
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-            borderRadius: '8px',
-          }}
-        />
-        {/* Floating My Video Overlay */}
         <Box
-          position="absolute"
-          {...floatingVideoProps}
-          width="300px"
-          height="auto"
-          boxShadow="lg"
-          borderRadius="md"
-          overflow="hidden"
+          position={{md: 'absolute', base:'static'}}
+          width={{md:'300px' , base:'full'}}
           bg="black"
+          borderRadius="md"
+          display="flex"
+          alignItems="end"
+          justifyContent="end"
+          right={{md: '20px'}}
+          bottom={{md: '20px'}}
+        >
+          {/* My Video */}
+          <video
+            ref={myVideoRef}
+            autoPlay
+            playsInline
+            muted
+            style={{
+              width: '100%',
+              borderRadius: '8px',
+              objectFit: 'cover',
+              maxWidth: '1000px',
+            }}
+          />
+        </Box>
+        <Text fontWeight="bold" mb={2}>
+          Your Video
+        </Text>
+        <Divider mb={4} />
+        <Box
+          bg="black"
+          borderRadius="md"
+          w="full"
+          flex="1"
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+        >
+          {/* Peer Video */}
+          <video
+            ref={peerVideoRef}
+            autoPlay
+            playsInline
+            style={{
+              width: '100%',
+              borderRadius: '8px',
+              objectFit: 'cover',
+              maxWidth: '1000px',
+            }}
+          />
+        </Box>
+      </Flex>
+    ) : (
+      <Flex
+        direction="column"
+        flex={1}
+        bg="gray.800"
+        borderRadius="md"
+        p={4}
+        align="center"
+        minH="400px"
+      >
+        <Box
+          bg="black"
+          borderRadius="md"
+          w="full"
+          flex="1"
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
         >
           <video
             ref={myVideoRef}
@@ -489,98 +455,53 @@ const renderCallSection = () => {
             muted
             style={{
               width: '100%',
-              height: '100%',
+              borderRadius: '8px',
               objectFit: 'cover',
+              maxWidth: '1000px',
             }}
           />
         </Box>
+        <Text fontWeight="bold" mb={2}>
+          Your Video
+        </Text>
+        <Divider mb={4} />
+        {/* <Flex
+          direction="column"
+          align="center"
+          justify="center"
+          w="full"
+          h="150px"
+          bg="gray.700"
+          borderRadius="md"
+        >
+          <Text color="gray.400">Waiting for a call...</Text> */}
+          {incomingCallInfo?.isSomeoneCalling && (
+            <Flex
+            direction="column"
+            align="center"
+            justify="center"
+            w="full"
+            h="150px"
+            bg="gray.700"
+            borderRadius="md"
+          >
+            <HStack mt={2} gap='50px'>
+              <Button colorScheme="green" leftIcon={<FaPhone />} onClick={answerCall}>
+                Accept
+              </Button>
+              <Button colorScheme="red" leftIcon={<FaPhoneSlash />} onClick={destroyConnection}>
+                Reject
+              </Button>
+            </HStack>
+            </Flex>
+          )}
+
       </Flex>
     );
-  }
-  return (
-    <Flex
-      direction="column"
-      flex={1}
-      bg="gray.800"
-      borderRadius="md"
-      p={4}
-      align="center"
-      minH="400px"
-    >
-      <Text fontWeight="bold" mb={2}>Your Video</Text>
-      <Divider mb={4} />
-      <Box
-        bg="black"
-        borderRadius="md"
-        w="full"
-        flex="1"
-        display="flex"
-        alignItems="center"
-        justifyContent="center"
-      >
-        {/* My Video */}
-        <video
-          ref={myVideoRef}
-          autoPlay
-          playsInline
-          muted
-          style={{ width: '250px', borderRadius: '8px' }}
-        />
-      </Box>
-      <Divider my={4} />
-      <Flex
-        direction="column"
-        align="center"
-        justify="center"
-        w="full"
-        h="150px"
-        bg="gray.700"
-        borderRadius="md"
-      >
-        <Text color="gray.400">Waiting for a call...</Text>
-        {incomingCallInfo?.isSomeoneCalling && (
-          <HStack mt={2}>
-            <Button
-              colorScheme="green"
-              leftIcon={<FaPhone />}
-              onClick={answerCall}
-            >
-              Accept
-            </Button>
-            <Button
-              colorScheme="red"
-              leftIcon={<FaPhoneSlash />}
-              onClick={destroyConnection}
-            >
-              Reject
-            </Button>
-          </HStack>
-        )}
-      </Flex>
-    </Flex>
-  );
-};
-
-  // Right Column: Media Display
-  // const renderMediaSection = () => (
-  //   <Flex
-  //     direction="column"
-  //     flex={1}
-  //     bg="gray.800"
-  //     borderRadius="md"
-  //     p={4}
-  //     align="center"
-  //     minH="400px"
-  //   >
-  //     <Text fontWeight="bold" mb={2}>Media Display</Text>
-  //     <Divider mb={4} />
-  //     {isScreenSharing ? (
-  //       <Text color="green.400" fontWeight="bold">Screen Sharing Active</Text>
-  //     ) : (
-  //       <Text color="gray.400">No screen shared</Text>
-  //     )}
-  //   </Flex>
-  // );
+  };
+  
+  
+  
 
   // Bottom Action Buttons
   const renderActionButtons = () => (
@@ -608,11 +529,13 @@ const renderCallSection = () => {
           {isScreenSharing ? 'Stop Share' : 'Share Screen'}
         </Button>
       )}
+
       {isCallAccepted && (
         <Button colorScheme="red" leftIcon={<FaPhoneSlash />} onClick={endCall}>
           End Call
         </Button>
       )}
+
     </HStack>
   );
 
@@ -666,7 +589,7 @@ const renderCallSection = () => {
         {/* 3 Columns: Chat | Call | Media */}
         <Flex flex="1" gap={4} direction={['column', 'row']} mb={4}>
           {renderCallSection()}
-          {renderChatSection()}
+          {isCallAccepted ? renderChatSection() : <></>}
           {/* {renderMediaSection()} */}
         </Flex>
 
