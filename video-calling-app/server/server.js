@@ -5,16 +5,32 @@ const cors = require("cors");
 
 const app = express();
 const server = http.createServer(app);
+
+// Configure CORS for the deployed frontend
 const io = socketIo(server, {
     cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-    }
+        origin: "https://video-calling-frontend-3iox.onrender.com",
+        methods: ["GET", "POST"],
+        credentials: true,
+        transports: ['websocket', 'polling']
+    },
+    allowEIO3: true,
+    pingTimeout: 60000,
+    pingInterval: 25000
 });
 
-app.use(cors());
+app.use(cors({
+    origin: "https://video-calling-frontend-3iox.onrender.com",
+    credentials: true
+}));
 
-const PORT = 4000;
+// Only allow production environment
+if (process.env.NODE_ENV !== 'production') {
+    console.error('This server is configured to run only in production environment');
+    process.exit(1);
+}
+
+const PORT = process.env.PORT || 4000;
 
 io.on("connection", (socket) => {
     console.log("A user connected:", socket.id);

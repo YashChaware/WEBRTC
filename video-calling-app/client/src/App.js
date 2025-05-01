@@ -30,7 +30,16 @@ import { FiSend } from 'react-icons/fi';
 import './App.css'; // Optional styling
 
 window.process = process;
-const socket = io('ws://localhost:4000', { transports: ['websocket'] });
+const socket = io('https://webrtc-app-97p9.onrender.com', { 
+    transports: ['websocket', 'polling'],
+    secure: true,
+    rejectUnauthorized: false,
+    forceNew: true,
+    reconnection: true,
+    reconnectionAttempts: 5,
+    reconnectionDelay: 1000,
+    timeout: 20000
+});
 
 // Optional custom Chakra UI theme (dark mode)
 const customTheme = extendTheme({
