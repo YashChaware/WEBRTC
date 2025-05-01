@@ -33,12 +33,7 @@ window.process = process;
 const socket = io('https://webrtc-app-97p9.onrender.com', { 
     transports: ['websocket', 'polling'],
     secure: true,
-    rejectUnauthorized: false,
-    forceNew: true,
-    reconnection: true,
-    reconnectionAttempts: 5,
-    reconnectionDelay: 1000,
-    timeout: 20000
+    rejectUnauthorized: false
 });
 
 // Optional custom Chakra UI theme (dark mode)
@@ -196,6 +191,7 @@ function App() {
     const videoTrack = stream.getVideoTracks()[0];
     if (videoTrack) {
       videoTrack.enabled = !isVideoOn;
+      stream.getVideoTracks().forEach((track) => (track.enabled = !isVideoOn));
       setIsVideoOn(!isVideoOn);
     }
   }, [stream, isVideoOn]);
@@ -312,9 +308,13 @@ function App() {
       >
         {messages.map((msg, index) => (
           <Flex key={index} mb={2} direction="column" fontSize="sm">
-            <Text fontWeight="bold">{msg.from}:</Text>
+            <Text fontWeight="bold" 
+            style={{textAlign: msg.from===userId?"right":"left", width: "100%"}}>
+              {msg.from}:</Text>
             {msg.text ? (
-              <Text ml={4} whiteSpace="pre-line">{msg.text}</Text>
+              <Text
+              style={{alignSelf: msg.from===userId?"flex-end":"flex-start", maxWidth:"70%", maxHeight:"150px", overflow:"auto"}}
+               ml={4} whiteSpace="pre-line">{msg.text}</Text>
             ) : (
               <Box ml={4}>
                 sent a file: <a href={msg.data} download={msg.fileName}>{msg.fileName}</a>
@@ -527,24 +527,22 @@ function App() {
         leftIcon={<FaMicrophone />}
         onClick={toggleAudio}
       >
-        {isAudioOn ? 'Mic on' : 'Mic '}
+        {isAudioOn ? 'Mic on' : 'Mic off'}
       </Button>
       {isCallAccepted && (
-        <Button
-          colorScheme={isScreenSharing ? 'red' : 'blue'}
-          leftIcon={<FaDesktop />}
-          onClick={isScreenSharing ? stopScreenShare : startScreenShare}
-        >
-          {isScreenSharing ? 'Stop Share' : 'Share Screen'}
-        </Button>
+        <>
+          <Button
+            colorScheme={isScreenSharing ? 'red' : 'blue'}
+            leftIcon={<FaDesktop />}
+            onClick={isScreenSharing ? stopScreenShare : startScreenShare}
+          >
+            {isScreenSharing ? 'Stop Share' : 'Share Screen'}
+          </Button>
+          <Button colorScheme="red" leftIcon={<FaPhoneSlash />} onClick={endCall}>
+            End Call
+          </Button>
+        </>
       )}
-
-      {isCallAccepted && (
-        <Button colorScheme="red" leftIcon={<FaPhoneSlash />} onClick={endCall}>
-          End Call
-        </Button>
-      )}
-
     </HStack>
   );
 
@@ -570,22 +568,24 @@ function App() {
         </Text>
       </HStack>
 
-      <HStack>
-        <Input
-          placeholder="Enter User ID to Call"
-          value={userToCall}
-          onChange={(e) => setUserToCall(e.target.value)}
-          bg="gray.700"
-          w="200px"
-        />
-        <Button
-          colorScheme="blue"
-          onClick={initiateCall}
-          leftIcon={<FaPhone />}
-        >
-          Call
-        </Button>
-      </HStack>
+      {!isCallAccepted && (
+        <HStack>
+          <Input
+            placeholder="Enter User ID to Call"
+            value={userToCall}
+            onChange={(e) => setUserToCall(e.target.value)}
+            bg="gray.700"
+            w="200px"
+          />
+          <Button
+            colorScheme="blue"
+            onClick={initiateCall}
+            leftIcon={<FaPhone />}
+          >
+            Call
+          </Button>
+        </HStack>
+      )}
     </Flex>
   );
 
@@ -598,7 +598,7 @@ function App() {
         {/* 3 Columns: Chat | Call | Media */}
         <Flex flex="1" gap={4} direction={['column', 'row']} mb={4}>
           {renderCallSection()}
-          {isCallAccepted ? renderChatSection() : <></>}
+          {isCallAccepted ? renderChatSection() : null}
           {/* {renderMediaSection()} */}
         </Flex>
 

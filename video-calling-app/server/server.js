@@ -6,17 +6,13 @@ const cors = require("cors");
 const app = express();
 const server = http.createServer(app);
 
-// Configure CORS for the deployed frontend
 const io = socketIo(server, {
     cors: {
         origin: "https://video-calling-frontend-3iox.onrender.com",
         methods: ["GET", "POST"],
         credentials: true,
         transports: ['websocket', 'polling']
-    },
-    allowEIO3: true,
-    pingTimeout: 60000,
-    pingInterval: 25000
+    }
 });
 
 app.use(cors({
@@ -24,16 +20,13 @@ app.use(cors({
     credentials: true
 }));
 
-// Only allow production environment
-if (process.env.NODE_ENV !== 'production') {
-    console.error('This server is configured to run only in production environment');
-    process.exit(1);
-}
-
 const PORT = process.env.PORT || 4000;
+const OnlineUsers = {}
+
 
 io.on("connection", (socket) => {
     console.log("A user connected:", socket.id);
+    OnlineUsers[socket.email] = socket.id;
 
     // Send the socket ID to the client (used as unique peer ID)
     socket.emit("yourID", socket.id);
@@ -63,25 +56,25 @@ io.on("connection", (socket) => {
 
     // Handle screen share start
     socket.on("startScreenShare", (data) => {
-        console.log(`📺 Screen sharing started by ${data.from}`);
+        console.log("Screen sharing started by " + data.from);
         io.to(data.to).emit("screenShareStarted", { from: data.from });
     });
 
     // Handle screen share stop
     socket.on("stopScreenShare", (data) => {
-        console.log(`🛑 Screen sharing stopped by ${data.from}`);
+        console.log("Screen sharing stopped by " + data.from);
         io.to(data.to).emit("screenShareStopped");
     });
 
     // Chat message handler for text messages
     socket.on("sendMessage", (data) => {
-        console.log(`Forwarding message from ${data.from} to ${data.to}: ${data.text}`);
+        console.log("Forwarding message from " + data.from + " to " + data.to + ": " + data.text);
         io.to(data.to).emit("message", data);
     });
     
     // File share handler
     socket.on("sendFile", (data) => {
-        console.log(`Forwarding file from ${data.from} to ${data.to}: ${data.fileName}`);
+        console.log("Forwarding file from " + data.from + " to " + data.to + ": " + data.fileName);
         io.to(data.to).emit("message", data);
     });
 
@@ -91,5 +84,5 @@ io.on("connection", (socket) => {
 });
 
 server.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
+    console.log("Server running on port " + PORT);
 });
