@@ -5,16 +5,27 @@ const cors = require("cors");
 
 const app = express();
 const server = http.createServer(app);
+
+// Allow configurable CORS origin
+const allowedOrigin = process.env.CLIENT_URL || "*";
+
 const io = socketIo(server, {
     cors: {
-        origin: "*",
+        origin: allowedOrigin,
         methods: ["GET", "POST"]
     }
 });
 
-app.use(cors());
+app.use(cors({
+    origin: allowedOrigin
+}));
 
-const PORT = 4000;
+// Basic route for health check
+app.get("/", (req, res) => {
+    res.send("WebRTC Server is running!");
+});
+
+const PORT = process.env.PORT || 4000;
 
 io.on("connection", (socket) => {
     console.log("A user connected:", socket.id);
