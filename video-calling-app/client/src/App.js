@@ -30,7 +30,10 @@ import { FiSend } from 'react-icons/fi';
 import './App.css'; // Optional styling
 
 window.process = process;
-const socket = io('ws://localhost:4000', { transports: ['websocket'] });
+
+// Use environment variable for server URL with fallback
+const SERVER_URL = process.env.REACT_APP_SERVER_URL || 'ws://localhost:4000';
+const socket = io(SERVER_URL, { transports: ['websocket'] });
 
 // Optional custom Chakra UI theme (dark mode)
 const customTheme = extendTheme({
