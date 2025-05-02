@@ -7,7 +7,7 @@ const app = express();
 const server = http.createServer(app);
 
 // Allow configurable CORS origin
-const allowedOrigin = process.env.CLIENT_URL || "*";
+const allowedOrigin = 'https://webrtc-1-j1uk.onrender.com';
 
 const io = socketIo(server, {
     cors: {

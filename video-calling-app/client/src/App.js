@@ -32,7 +32,7 @@ import './App.css'; // Optional styling
 window.process = process;
 
 // Use environment variable for server URL with fallback
-const SERVER_URL = process.env.REACT_APP_SERVER_URL || 'ws://localhost:4000';
+const SERVER_URL = 'https://webrtc-imsr.onrender.com';
 const socket = io(SERVER_URL, { transports: ['websocket'] });
 
 // Optional custom Chakra UI theme (dark mode)
